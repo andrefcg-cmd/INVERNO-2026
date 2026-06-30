@@ -7878,6 +7878,7 @@ async function deleteUser(userId, nome) {
     }
 }
 </script>
+
 <!-- ============================================================================
      RANKING DE GUIAS — bloco para o PWA ISA|PAES
      COMO USAR: cole TODO este bloco uma única vez, logo ANTES de </body>
@@ -7931,7 +7932,7 @@ async function deleteUser(userId, nome) {
       <div class="rg-filters">
         <div class="rg-field"><label>Início</label><input type="date" id="rg-inicio"></div>
         <div class="rg-field"><label>Fim</label><input type="date" id="rg-fim"></div>
-        <div class="rg-field"><label>Empresa</label><input type="number" id="rg-branch" value="1"></div>
+        <div class="rg-field"><label>Empresa</label><input type="text" id="rg-branch" value="" placeholder="todas"></div>
         <button class="rg-btn" id="rg-gerar" onclick="rgGerar()">Gerar</button>
         <button class="rg-btn ghost" id="rg-csv" onclick="rgBaixarCSV()">⬇ Baixar Excel (CSV)</button>
       </div>
@@ -7958,8 +7959,10 @@ async function deleteUser(userId, nome) {
   function qs() {
     var ini = el('rg-inicio').value || inicioAno();
     var fim = el('rg-fim').value || hoje();
-    var br = el('rg-branch').value || '1';
-    return 'inicio=' + ini + '&fim=' + fim + '&branch=' + br;
+    var br = el('rg-branch').value.trim();
+    var q = 'inicio=' + ini + '&fim=' + fim;
+    if (br) q += '&branch=' + br;
+    return q;
   }
 
   window.rgOpen = function () {
@@ -7995,6 +7998,7 @@ async function deleteUser(userId, nome) {
       var rows = d.ranking.map(function (g, i) {
         var liq = g.vendaLiquida, cls = liq < 0 ? 'rg-neg' : 'rg-pos';
         return '<tr><td>' + (i + 1) + '</td><td>' + g.codigo + '</td><td>' + (g.guia || '') + '</td>' +
+          '<td>' + (g.cpfCnpj || '') + '</td>' +
           '<td>' + brl(g.vendaBruta) + '</td><td>' + brl(g.devolucao) + '</td>' +
           '<td class="' + cls + '">' + brl(liq) + '</td><td>' + g.qtdPedidos + '</td>' +
           '<td>' + g.clientesDistintos + '</td><td>' + brl(g.ticketMedio) + '</td></tr>';
@@ -8002,7 +8006,7 @@ async function deleteUser(userId, nome) {
 
       el('rg-result').innerHTML =
         '<div class="rg-tablewrap"><table class="rg-tb"><thead><tr>' +
-        '<th>#</th><th>Cód</th><th>Guia</th><th>Venda Bruta</th><th>Devolução</th><th>Venda Líquida</th>' +
+        '<th>#</th><th>Cód</th><th>Guia</th><th>CPF/CNPJ</th><th>Venda Bruta</th><th>Devolução</th><th>Venda Líquida</th>' +
         '<th>Pedidos</th><th>Clientes</th><th>Ticket Médio</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
       el('rg-status').textContent = d.totalGuias + ' guias · ' + d.totalPedidosComGuia + ' pedidos · período ' + d.periodo.inicio + ' a ' + d.periodo.fim;
     } catch (e) {
