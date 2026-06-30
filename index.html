@@ -7878,5 +7878,187 @@ async function deleteUser(userId, nome) {
     }
 }
 </script>
+<!-- ============================================================================
+     RANKING DE GUIAS — bloco para o PWA ISA|PAES
+     COMO USAR: cole TODO este bloco uma única vez, logo ANTES de </body>
+     no index.html, e dê commit/redeploy no GitHub Pages.
+     Ele se vira sozinho: lê API_CONFIG (baseUrl + apiKey) que já existe no app,
+     injeta o botão dentro do submenu Comercial e abre uma janela própria.
+============================================================================ -->
+<style>
+  #rg-overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(4px);
+    z-index:99999;display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:24px}
+  #rg-overlay.on{display:flex}
+  .rg-box{background:#14130f;border:1px solid #2c2a24;border-radius:16px;max-width:920px;width:100%;
+    color:#e9e6df;font-family:inherit;box-shadow:0 20px 60px rgba(0,0,0,.6);margin:auto}
+  .rg-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #2c2a24}
+  .rg-head h2{margin:0;font-size:17px;letter-spacing:.04em;font-weight:600}
+  .rg-x{background:none;border:none;color:#b9b4a8;font-size:22px;cursor:pointer;line-height:1}
+  .rg-body{padding:20px 22px}
+  .rg-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:16px}
+  .rg-field{display:flex;flex-direction:column;gap:5px}
+  .rg-field label{font-size:11px;color:#9c978b;letter-spacing:.05em;text-transform:uppercase}
+  .rg-field input{background:#0e0d0a;border:1px solid #34322b;border-radius:9px;color:#e9e6df;
+    padding:9px 11px;font-size:14px;font-family:inherit}
+  .rg-field input[type=number]{width:90px}
+  .rg-btn{background:#caa14a;color:#1a1812;border:none;border-radius:9px;padding:10px 18px;font-weight:600;
+    cursor:pointer;font-size:14px;font-family:inherit}
+  .rg-btn.ghost{background:transparent;border:1px solid #4a463b;color:#cfc7b4}
+  .rg-btn:disabled{opacity:.5;cursor:default}
+  .rg-status{font-size:13px;color:#9c978b;margin:10px 0}
+  .rg-tablewrap{overflow:auto;border:1px solid #2c2a24;border-radius:10px}
+  table.rg-tb{border-collapse:collapse;width:100%;font-size:13px;min-width:640px}
+  table.rg-tb th,table.rg-tb td{padding:9px 11px;text-align:right;border-bottom:1px solid #232118;white-space:nowrap}
+  table.rg-tb th{background:#1d1b15;color:#cbbf9d;font-weight:600;position:sticky;top:0}
+  table.rg-tb td:nth-child(1),table.rg-tb th:nth-child(1){text-align:center;color:#8f8a7d}
+  table.rg-tb td:nth-child(3),table.rg-tb th:nth-child(3){text-align:left}
+  table.rg-tb tr:hover td{background:#1a180f}
+  .rg-pos{color:#caa14a;font-weight:600}
+  .rg-neg{color:#c97c6b}
+  .rg-diag{background:#1a180f;border:1px solid #3a3526;border-radius:10px;padding:14px 16px;font-size:13px;line-height:1.5}
+  .rg-diag b{color:#caa14a}
+  .rg-pre{background:#0c0b08;border:1px solid #2c2a24;border-radius:8px;padding:12px;overflow:auto;
+    max-height:340px;font-size:11px;color:#bdb8ab;white-space:pre;margin-top:10px}
+</style>
+
+<div id="rg-overlay" onclick="if(event.target===this)rgClose()">
+  <div class="rg-box">
+    <div class="rg-head">
+      <h2>📊 Ranking de Guias</h2>
+      <button class="rg-x" onclick="rgClose()">×</button>
+    </div>
+    <div class="rg-body">
+      <div class="rg-filters">
+        <div class="rg-field"><label>Início</label><input type="date" id="rg-inicio"></div>
+        <div class="rg-field"><label>Fim</label><input type="date" id="rg-fim"></div>
+        <div class="rg-field"><label>Empresa</label><input type="number" id="rg-branch" value="1"></div>
+        <button class="rg-btn" id="rg-gerar" onclick="rgGerar()">Gerar</button>
+        <button class="rg-btn ghost" id="rg-csv" onclick="rgBaixarCSV()">⬇ Baixar Excel (CSV)</button>
+      </div>
+      <div class="rg-status" id="rg-status">Selecione o período e clique em Gerar.</div>
+      <div id="rg-result"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // Base + chave: usa o que o app já tem; cai num padrão se preciso.
+  function cfg() {
+    var base = (typeof API_CONFIG !== 'undefined' && API_CONFIG.baseUrl) || 'https://isapaes-api.andrefcg.workers.dev';
+    var key = (typeof API_CONFIG !== 'undefined' && API_CONFIG.apiKey)
+      || sessionStorage.getItem('isa-api-key') || 'Isapaes@2026!X';
+    return { base: base, key: key };
+  }
+  function hoje() { return new Date().toISOString().slice(0, 10); }
+  function inicioAno() { return new Date().getFullYear() + '-01-01'; }
+  function brl(n) { return (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+  function el(id) { return document.getElementById(id); }
+
+  function qs() {
+    var ini = el('rg-inicio').value || inicioAno();
+    var fim = el('rg-fim').value || hoje();
+    var br = el('rg-branch').value || '1';
+    return 'inicio=' + ini + '&fim=' + fim + '&branch=' + br;
+  }
+
+  window.rgOpen = function () {
+    if (!el('rg-inicio').value) el('rg-inicio').value = inicioAno();
+    if (!el('rg-fim').value) el('rg-fim').value = hoje();
+    el('rg-overlay').classList.add('on');
+  };
+  window.rgClose = function () { el('rg-overlay').classList.remove('on'); };
+
+  window.rgGerar = async function () {
+    var c = cfg();
+    el('rg-gerar').disabled = true;
+    el('rg-status').textContent = 'Buscando pedidos de venda...';
+    el('rg-result').innerHTML = '';
+    try {
+      var r = await fetch(c.base + '/api/totvs/ranking-guias?' + qs(), { headers: { 'X-API-Key': c.key } });
+      var d = await r.json();
+      if (!r.ok) { el('rg-status').textContent = 'Erro ' + r.status + ': ' + (d.error || ''); el('rg-gerar').disabled = false; return; }
+
+      if (!d.ranking || d.ranking.length === 0) {
+        el('rg-status').textContent = 'Nenhum guia encontrado no período.';
+        var ops = d.operacoesEncontradas ? JSON.stringify(d.operacoesEncontradas) : '—';
+        el('rg-result').innerHTML =
+          '<div class="rg-diag"><b>Diagnóstico</b> (o ranking não achou guias — provavelmente falta confirmar os campos):<br>' +
+          '• Pedidos lidos com guia: ' + (d.totalPedidosComGuia ?? 0) + ' &nbsp; sem guia: ' + (d.totalPedidosSemGuia ?? 0) + ' &nbsp; fora do período: ' + (d.foraDoPeriodo ?? 0) + '<br>' +
+          '• Operações encontradas nos pedidos: <b>' + ops + '</b><br>' +
+          (d._meta && d._meta.amostraCamposPedido ? '• Campos do pedido: ' + d._meta.amostraCamposPedido.join(', ') + '<br>' : '') +
+          '<br><button class="rg-btn ghost" onclick="rgDebug()">Ver dados crus do pedido (debug)</button>' +
+          '<div id="rg-pre-wrap"></div></div>';
+        el('rg-gerar').disabled = false; return;
+      }
+
+      var rows = d.ranking.map(function (g, i) {
+        var liq = g.vendaLiquida, cls = liq < 0 ? 'rg-neg' : 'rg-pos';
+        return '<tr><td>' + (i + 1) + '</td><td>' + g.codigo + '</td><td>' + (g.guia || '') + '</td>' +
+          '<td>' + brl(g.vendaBruta) + '</td><td>' + brl(g.devolucao) + '</td>' +
+          '<td class="' + cls + '">' + brl(liq) + '</td><td>' + g.qtdPedidos + '</td>' +
+          '<td>' + g.clientesDistintos + '</td><td>' + brl(g.ticketMedio) + '</td></tr>';
+      }).join('');
+
+      el('rg-result').innerHTML =
+        '<div class="rg-tablewrap"><table class="rg-tb"><thead><tr>' +
+        '<th>#</th><th>Cód</th><th>Guia</th><th>Venda Bruta</th><th>Devolução</th><th>Venda Líquida</th>' +
+        '<th>Pedidos</th><th>Clientes</th><th>Ticket Médio</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      el('rg-status').textContent = d.totalGuias + ' guias · ' + d.totalPedidosComGuia + ' pedidos · período ' + d.periodo.inicio + ' a ' + d.periodo.fim;
+    } catch (e) {
+      el('rg-status').textContent = 'Falha: ' + e.message;
+    }
+    el('rg-gerar').disabled = false;
+  };
+
+  window.rgBaixarCSV = async function () {
+    var c = cfg();
+    el('rg-status').textContent = 'Gerando CSV...';
+    try {
+      var r = await fetch(c.base + '/api/totvs/ranking-guias?' + qs() + '&format=csv', { headers: { 'X-API-Key': c.key } });
+      if (!r.ok) { el('rg-status').textContent = 'Erro ' + r.status + ' ao gerar CSV'; return; }
+      var b = await r.blob();
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'ranking_guias_' + (el('rg-inicio').value || inicioAno()) + '_a_' + (el('rg-fim').value || hoje()) + '.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      el('rg-status').textContent = 'CSV baixado.';
+    } catch (e) { el('rg-status').textContent = 'Falha no CSV: ' + e.message; }
+  };
+
+  // Mostra o retorno cru do pedido de venda (descoberta de campos).
+  window.rgDebug = async function () {
+    var c = cfg();
+    var wrap = el('rg-pre-wrap'); if (wrap) wrap.innerHTML = 'Buscando...';
+    try {
+      var r = await fetch(c.base + '/api/totvs/debug/pedido-venda-raw?branch=' + (el('rg-branch').value || '1'), { headers: { 'X-API-Key': c.key } });
+      var d = await r.json();
+      if (wrap) wrap.innerHTML = '<div class="rg-pre">' + JSON.stringify(d, null, 2).replace(/</g, '&lt;') + '</div>';
+    } catch (e) { if (wrap) wrap.innerHTML = 'Falha: ' + e.message; }
+  };
+
+  // Injeta o botão "Ranking de Guias" no submenu Comercial, sem mexer no resto.
+  function injetarBotao() {
+    var grid = document.querySelector('#sub-comercial .submenu-grid');
+    if (!grid || document.getElementById('rg-subbtn')) return;
+    var btn = document.createElement('div');
+    btn.className = 'sub-btn';
+    btn.id = 'rg-subbtn';
+    btn.setAttribute('onclick', 'rgOpen()');
+    btn.innerHTML =
+      '<div class="sub-icon">🏆</div>' +
+      '<div class="sub-info"><div class="sub-name">Ranking de Guias</div><div class="sub-desc">Vendas por corretor</div></div>' +
+      '<div class="sub-arrow">›</div>';
+    // insere logo após "Showroom" (1º botão)
+    var first = grid.querySelector('.sub-btn');
+    if (first && first.nextSibling) grid.insertBefore(btn, first.nextSibling);
+    else grid.appendChild(btn);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injetarBotao);
+  else injetarBotao();
+})();
+</script>
+<!-- ===================== FIM RANKING DE GUIAS ===================== -->
 
 </body></html>
